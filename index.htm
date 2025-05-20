@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Texto</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+        }
+        #search-container {
+        position:fixed;
+        top:0;
+        right:0;
+        left:0;
+        z-index:1;
+    display: flex;
+    flex-wrap: wrap; /* Permite que os elementos quebrem para a linha de baixo */
+    align-items: center; /* Mantém a centralização vertical */
+    gap: 10px;
+    padding: 10px;
+    padding-left:20px;
+    padding-right:20px;
+    background: #222;
+    height:fit-conent;
+}
+
+        #search-input {
+            flex-grow: 1;
+            padding: 7px;
+            border:2px solid #222;
+            border: none;
+    outline: none;
+    box-shadow: none;
+        }
+        #search-input:focus {
+    border: none;
+    outline: none;
+    box-shadow: none;
+}
+        #editable-div {
+        z-index:0;
+            position: fixed;
+            top: 90px;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            padding: 40px;
+            font-size: 16px;
+            line-height: 1.5;
+            border: none;
+            outline: none;
+            background-color: #ddd;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            min-height: 200px;
+            margin-top: 10px;
+        }
+        #editable-div::-webkit-scrollbar {
+    width: 70px;
+    height: 10px;
+    border-left:2px solid #000;
+}
+
+#editable-div::-webkit-scrollbar-track {
+    background-color: #000;
+}
+
+#editable-div::-webkit-scrollbar-thumb {
+    height:150px;
+    background-color: #eee;
+    border-left:2px solid #000;
+}
+        .highlight {
+            background-color: yellow;
+        }
+        .highlight-current {
+            background-color: orange;
+        }
+    </style>
+</head>
+<body>
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Pesquisar...">
+        <button style="padding:6px;font-weight:bold;background:#7f7" onclick="searchText()">Buscar</button>
+        <button style="padding:6px;font-weight:bold;background:#eee" onclick="nextMatch()">Próximo</button>
+        <button style="padding:6px;font-weight:bold;background:#eee" onclick="prevMatch()">Anterior</button>
+        <button style="padding:6px;font-weight:bold;background:#f77" onclick="clearSearch()">Limpar</button>
+        <span style="color:#fff;" id="result-count">0 resultados</span>
+    </div>
+    <div id="editable-div" contenteditable="true"></div>
+
+    <script>
+        let matches = [];
+        let currentIndex = -1;
+
+        function searchText() {
+            const div = document.getElementById("editable-div");
+            const query = document.getElementById("search-input").value.trim();
+
+            if (!query) {
+                clearSearch();
+                return;
+            }
+
+            clearHighlights(div);
+            matches = [];
+            currentIndex = -1;
+
+            // Criar expressão regular que suporta caracteres especiais corretamente
+            const regex = new RegExp(query.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), "gi");
+            highlightMatches(div, regex);
+
+            updateResultCount();
+        }
+
+        function highlightMatches(node, regex) {
+            if (node.nodeType === 3) { // Nó de texto
+                const text = node.nodeValue;
+                let match;
+                let lastIndex = 0;
+                const fragment = document.createDocumentFragment();
+
+                while ((match = regex.exec(text)) !== null) {
+                    // Criar o texto antes da correspondência
+                    fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+
+                    // Criar o span destacado
+                    const span = document.createElement("span");
+                    span.classList.add("highlight");
+                    span.textContent = match[0];
+                    fragment.appendChild(span);
+                    matches.push(span); // Guardar referência
+
+                    lastIndex = match.index + match[0].length;
+                }
+
+                // Adicionar qualquer texto restante
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+
+                // Substituir o nó original
+                node.replaceWith(fragment);
+            } else if (node.nodeType === 1) { // Nó de elemento
+                [...node.childNodes].forEach(child => highlightMatches(child, regex));
+            }
+        }
+
+        function updateResultCount() {
+            document.getElementById("result-count").textContent = `${matches.length} resultados encontrados`;
+            if (matches.length > 0) {
+                currentIndex = 0;
+                updateCurrentHighlight();
+            }
+        }
+
+        function updateCurrentHighlight() {
+            document.querySelectorAll(".highlight-current").forEach(el => el.classList.remove("highlight-current"));
+
+            if (matches.length > 0 && currentIndex !== -1) {
+                matches[currentIndex].classList.add("highlight-current");
+                scrollToMatch();
+            }
+        }
+
+        function nextMatch() {
+            if (matches.length === 0) return;
+            currentIndex = (currentIndex + 1) % matches.length;
+            updateCurrentHighlight();
+        }
+
+        function prevMatch() {
+            if (matches.length === 0) return;
+            currentIndex = (currentIndex - 1 + matches.length) % matches.length;
+            updateCurrentHighlight();
+        }
+
+        function scrollToMatch() {
+            if (matches.length === 0 || currentIndex === -1) return;
+            const current = matches[currentIndex];
+            if (current) {
+                current.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+        }
+
+        function clearHighlights(div) {
+            const spans = div.querySelectorAll(".highlight, .highlight-current");
+            spans.forEach(span => {
+                span.replaceWith(document.createTextNode(span.textContent));
+            });
+        }
+
+        function clearSearch() {
+            document.getElementById("search-input").value = "";
+            document.getElementById("result-count").textContent = "0 resultados";
+            matches = [];
+            currentIndex = -1;
+            clearHighlights(document.getElementById("editable-div"));
+        }
+        
+        window.addEventListener("beforeunload", function (event) {
+    event.preventDefault(); // Necessário para alguns navegadores
+    event.returnValue = "Tem certeza que deseja sair? Suas alterações podem ser perdidas.";
+});
+
+    </script>
+</body>
+</html>
